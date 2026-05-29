@@ -15,7 +15,7 @@ esp-rtos = { version = "0.3.0", default-features = false, features = ["embassy"]
 embassy-net = { version = "0.9.1", default-features = false, features = ["tcp", "dhcpv4", "dhcpv4-hostname", "medium-ethernet", "proto-ipv4"] }
 esp-radio = { version = "0.18.0", default-features = false, features = [ "unstable", "wifi" ] }
 static_cell = { version = "2.1.1" }
-log = "0.4.29"
+log = "0.4.30"
 embassy-time = { version = "0.5.1", default-features = false }
 embassy-executor = { version = "0.10.0", default-features = false }
 heapless = { version = "0.9.3", default-features = false }
