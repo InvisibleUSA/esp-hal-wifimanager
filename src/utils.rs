@@ -16,7 +16,7 @@ pub async fn spawn_ap(
     spawner: &Spawner,
     wm_signals: Rc<WmInnerSignals>,
     settings: WmSettings,
-    ap_interface: Interface<'static>,
+    ap_interface: Interface,
 ) -> Result<()> {
     let ap_ip = embassy_net::Ipv4Address::new(192, 168, 4, 1);
     let ap_ip_config = Config::ipv4_static(StaticConfigV4 {

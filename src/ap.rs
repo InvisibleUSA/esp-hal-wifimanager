@@ -33,9 +33,6 @@ pub async fn run_dhcp_server(ap_stack: Stack<'static>) {
 }
 
 #[embassy_executor::task]
-pub async fn ap_task(
-    mut runner: Runner<'static, Interface<'static>>,
-    signals: Rc<WmInnerSignals>,
-) {
+pub async fn ap_task(mut runner: Runner<'static, Interface>, signals: Rc<WmInnerSignals>) {
     embassy_futures::select::select(runner.run(), signals.end_signalled()).await;
 }

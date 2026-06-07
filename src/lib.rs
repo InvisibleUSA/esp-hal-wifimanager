@@ -56,7 +56,9 @@ pub async fn init_wm(
     let mut rng = esp_hal::rng::Rng::new();
     let generated_ssid = settings.ssid.clone();
 
-    let (mut controller, interfaces) = esp_radio::wifi::new(wifi, Default::default())?;
+    let sta_if = esp_radio::wifi::Interface::station();
+    let ap_if = esp_radio::wifi::Interface::access_point();
+    let mut controller = esp_radio::wifi::WifiController::new(wifi, Default::default())?;
     controller.set_power_saving(esp_radio::wifi::PowerSaveMode::None)?;
 
     let wifi_setup = if let Some(nvs) = nvs {
@@ -104,7 +106,7 @@ pub async fn init_wm(
             spawner,
             wm_signals.clone(),
             settings.clone(),
-            interfaces.access_point,
+            ap_if,
         )
         .await?;
 
@@ -152,7 +154,7 @@ pub async fn init_wm(
 
     let sta_config = Config::dhcpv4(dhcp_config);
     let (sta_stack, runner) = embassy_net::new(
-        interfaces.station,
+        sta_if,
         sta_config,
         {
             static STATIC_CELL: static_cell::StaticCell<StackResources<3>> =
@@ -316,11 +318,11 @@ async fn connection(
             }
 
             // just steal wifi, fuck it lmao
-            match esp_radio::wifi::new(
+            match esp_radio::wifi::WifiController::new(
                 unsafe { esp_hal::peripherals::WIFI::steal() },
                 Default::default(),
             ) {
-                Ok((mut new_controller, _)) => {
+                Ok(mut new_controller) => {
                     if let Err(e) =
                         new_controller.set_power_saving(esp_radio::wifi::PowerSaveMode::None)
                     {
@@ -417,6 +419,6 @@ async fn connection(
 }
 
 #[embassy_executor::task]
-async fn sta_task(mut runner: Runner<'static, Interface<'static>>) {
+async fn sta_task(mut runner: Runner<'static, Interface>) {
     runner.run().await
 }

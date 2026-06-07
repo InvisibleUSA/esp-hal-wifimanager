@@ -13,9 +13,9 @@ repository = "https://github.com/filipton/esp-hal-wifimanager"
 esp-hal = { version = "1.1.1", default-features = false, features = ["unstable", "rt"] }
 esp-rtos = { version = "0.3.0", default-features = false, features = ["embassy"] }
 embassy-net = { version = "0.9.1", default-features = false, features = ["tcp", "dhcpv4", "dhcpv4-hostname", "medium-ethernet", "proto-ipv4"] }
-esp-radio = { version = "0.18.0", default-features = false, features = [ "unstable", "wifi" ] }
+esp-radio = { version = "1.0.0-beta.0", default-features = false, features = [ "unstable", "wifi" ] }
 static_cell = { version = "2.1.1" }
-log = "0.4.31"
+log = "0.4.32"
 embassy-time = { version = "0.5.1", default-features = false }
 embassy-executor = { version = "0.10.0", default-features = false }
 heapless = { version = "0.9.3", default-features = false }
