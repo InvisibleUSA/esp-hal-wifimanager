@@ -1,12 +1,16 @@
 use crate::structs::WmInnerSignals;
-use alloc::{format, rc::Rc, vec::Vec};
+#[cfg(feature = "ota")]
+use alloc::format;
+use alloc::rc::Rc;
 use embassy_executor::Spawner;
 use embassy_net::{tcp::TcpSocket, Stack};
 use embassy_time::{Duration, Timer};
+#[cfg(feature = "ota")]
 use embedded_io_async::Write;
 
 const WEB_TASK_POOL_SIZE: usize = 2;
 const HTTP_BUFFER_SIZE: usize = 2048;
+const HTTP_HEADER_BUFFER_SIZE: usize = 192;
 
 struct HttpRequest<'a> {
     method: &'a str,
@@ -39,19 +43,44 @@ fn parse_http_request(buffer: &[u8]) -> Option<HttpRequest<'_>> {
     })
 }
 
-fn create_http_response(status: &str, content_type: &str, body: &str) -> Vec<u8> {
-    let body_bytes = body.as_bytes();
-    let header = format!(
-        "HTTP/1.1 {}\r\nContent-Type: {}; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-        status,
-        content_type,
-        body_bytes.len()
+async fn write_all_to_socket(socket: &mut TcpSocket<'_>, mut data: &[u8]) -> bool {
+    while !data.is_empty() {
+        match socket.write(data).await {
+            Ok(0) => break,
+            Ok(n) => data = &data[n..],
+            Err(e) => {
+                log::error!("Http wifimanager write error: {e:?}");
+                return false;
+            }
+        }
+    }
+
+    _ = socket.flush().await;
+    data.is_empty()
+}
+
+async fn write_response(
+    socket: &mut TcpSocket<'_>,
+    status: &str,
+    content_type: &str,
+    body: &[u8],
+) -> bool {
+    let mut header: heapless::String<HTTP_HEADER_BUFFER_SIZE> = heapless::String::new();
+    _ = core::fmt::write(
+        &mut header,
+        format_args!(
+            "HTTP/1.1 {}\r\nContent-Type: {}; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            status,
+            content_type,
+            body.len()
+        ),
     );
 
-    let mut response = Vec::with_capacity(header.len() + body_bytes.len());
-    response.extend_from_slice(header.as_bytes());
-    response.extend_from_slice(body_bytes);
-    response
+    if !write_all_to_socket(socket, header.as_bytes()).await {
+        return false;
+    }
+
+    write_all_to_socket(socket, body).await
 }
 
 #[cfg(feature = "ota")]
@@ -63,24 +92,31 @@ async fn handle_request(
     request: HttpRequest<'_>,
     signals: &Rc<WmInnerSignals>,
     wifi_panel_str: &'static str,
-) -> Vec<u8> {
+    socket: &mut TcpSocket<'_>,
+) {
     match (request.method, request.path) {
-        ("GET", "/") => create_http_response("200 OK", "text/html", wifi_panel_str),
-        ("GET", "/update") => create_http_response("200 OK", "text/html", UPDATE_PANEL_HTML),
+        ("GET", "/") => {
+            _ = write_response(socket, "200 OK", "text/html", wifi_panel_str.as_bytes()).await;
+        }
+        ("GET", "/update") => {
+            _ = write_response(socket, "200 OK", "text/html", UPDATE_PANEL_HTML.as_bytes()).await;
+        }
         ("GET", "/list") => {
             let scan_res = signals.wifi_scan_res.try_lock();
             let resp = match scan_res {
                 Ok(ref resp) => resp.as_str(),
                 Err(_) => "",
             };
-            create_http_response("200 OK", "text/plain", resp)
+            _ = write_response(socket, "200 OK", "text/plain", resp.as_bytes()).await;
         }
         ("POST", "/setup") => {
             let body_vec = request.body.to_vec();
             signals.wifi_conn_info_sig.signal(body_vec);
-            create_http_response("200 OK", "text/plain", ".")
+            _ = write_response(socket, "200 OK", "text/plain", b".").await;
         }
-        _ => create_http_response("404 Not Found", "text/plain", "Not Found"),
+        _ => {
+            _ = write_response(socket, "404 Not Found", "text/plain", b"Not Found").await;
+        }
     }
 }
 
@@ -136,44 +172,16 @@ async fn web_task(
                 if req.path.starts_with("/update") && req.method.to_uppercase() == "POST" {
                     #[cfg(feature = "ota")]
                     if handle_update_req(req, &mut socket).await.is_none() {
-                        let resp = create_http_response(
+                        _ = write_response(
+                            &mut socket,
                             "500 Internal Server Error",
                             "text/plain",
-                            "Update handler failed",
-                        );
-                        let mut i = 0;
-
-                        while i < resp.len() {
-                            match socket.write(&resp[i..]).await {
-                                Ok(n) => {
-                                    i += n;
-                                }
-                                Err(e) => {
-                                    log::error!("Http wifimanager write error: {e:?}");
-                                    break;
-                                }
-                            }
-
-                            _ = socket.flush().await;
-                        }
+                            b"Update handler failed",
+                        )
+                        .await;
                     }
                 } else {
-                    let resp = handle_request(req, &signals, wifi_panel_str).await;
-                    let mut i = 0;
-
-                    while i < resp.len() {
-                        match socket.write(&resp[i..]).await {
-                            Ok(n) => {
-                                i += n;
-                            }
-                            Err(e) => {
-                                log::error!("Http wifimanager write error: {e:?}");
-                                break;
-                            }
-                        }
-
-                        _ = socket.flush().await;
-                    }
+                    handle_request(req, &signals, wifi_panel_str, &mut socket).await;
                 }
             }
 
@@ -228,7 +236,7 @@ async fn handle_update_req(req: HttpRequest<'_>, socket: &mut TcpSocket<'_>) -> 
         return None;
     }
 
-    let mut ota_buffer = [0; 4096];
+    let mut ota_buffer = alloc::vec![0u8; 4096];
     ota_buffer[..req.body.len()].copy_from_slice(req.body);
     let mut buffer_pos = req.body.len();
     let mut total = 0;
@@ -243,12 +251,16 @@ async fn handle_update_req(req: HttpRequest<'_>, socket: &mut TcpSocket<'_>) -> 
                     if res == Ok(true) {
                         if ota.ota_flush(true, true).is_ok() {
                             log::info!("OTA restart!");
-                            let resp = create_http_response(
+                            if !write_response(
+                                socket,
                                 "200 OK",
                                 "text/plain",
-                                "OTA Update Successful. Restarting...",
-                            );
-                            socket.write_all(&resp).await.ok()?;
+                                b"OTA Update Successful. Restarting...",
+                            )
+                            .await
+                            {
+                                return None;
+                            }
                             Timer::after(Duration::from_millis(100)).await;
                             esp_hal::system::software_reset();
                         } else {
@@ -294,22 +306,7 @@ async fn handle_update_req(req: HttpRequest<'_>, socket: &mut TcpSocket<'_>) -> 
         }
     }
 
-    let resp = create_http_response("200 OK", "text/html", "Uploaded");
-    let mut i = 0;
-
-    while i < resp.len() {
-        match socket.write(&resp[i..]).await {
-            Ok(n) => {
-                i += n;
-            }
-            Err(e) => {
-                log::error!("Http wifimanager write error: {e:?}");
-                break;
-            }
-        }
-
-        _ = socket.flush().await;
-    }
+    _ = write_response(socket, "200 OK", "text/html", b"Uploaded").await;
 
     Some(())
 }

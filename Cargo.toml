@@ -1,6 +1,6 @@
 [package]
 name = "esp-hal-wifimanager"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 license = "MIT"
 description = "Wifi Manager for esp-hal (bt+wifi ap)"
@@ -15,7 +15,7 @@ esp-rtos = { version = "0.3.0", default-features = false, features = ["embassy"]
 embassy-net = { version = "0.9.1", default-features = false, features = ["tcp", "dhcpv4", "dhcpv4-hostname", "medium-ethernet", "proto-ipv4"] }
 esp-radio = { version = "1.0.0-beta.0", default-features = false, features = [ "unstable", "wifi" ] }
 static_cell = { version = "2.1.1" }
-log = "0.4.32"
+log = "0.4.33"
 embassy-time = { version = "0.5.1", default-features = false }
 embassy-executor = { version = "0.10.0", default-features = false }
 heapless = { version = "0.9.3", default-features = false }
@@ -24,16 +24,15 @@ esp-storage = { version = "0.9.0", default-features = false, features = ["critic
 embedded-storage = "0.3.1"
 esp-hal-dhcp-server = { version = "0.4.0", optional = true }
 embassy-futures = "0.1.2"
-serde = { version = "1.0.228", default-features = false, features = ["alloc", "derive"] }
-serde_json = { version = "1.0.150", default-features = false, features = ["alloc"] }
+serde = { version = "1.0.229", default-features = false, features = ["alloc", "derive"] }
+serde_json = { version = "1.0.151", default-features = false, features = ["alloc"] }
 embedded-io-async = "0.7.0"
-portable-atomic = { version = "1.13.1", default-features = false }
+portable-atomic = { version = "1.14.0", default-features = false }
 trouble-host = { version = "0.6.0", optional = true }
 rand_core = { version = "0.6.4", features = ["getrandom"] }
 getrandom = { version = "=0.2.15", features = ["custom"] }
-esp-nvs = { git = "https://github.com/filipton/esp-nvs.git" }
-#esp-nvs = { git = "https://github.com/lhemala/esp-nvs.git" }
-esp-hal-ota = { version = "0.5.1", optional = true, features = ["log"] }
+esp-nvs = "0.5.0"
+esp-hal-ota = { version = "0.5.7", optional = true, features = ["log"] }
 include-minifier = "0.1.0"
 
 [features]
